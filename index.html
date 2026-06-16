@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Relatório de Vistoria - CLU</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Proj4js para conversão de Coordenadas Lat/Lon para UTM -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3e8ff; /* purple-100 */
+            color: #3b0764; /* purple-900 */
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #e9d5ff; }
+        ::-webkit-scrollbar-thumb { background: #a855f7; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #7e22ce; }
+
+        /* A4 Page Simulation */
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            background-color: #fdf4ff; /* fuchsia-50 */
+            margin: 0 auto;
+            padding: 20mm;
+            box-shadow: 0 10px 25px rgba(107, 33, 168, 0.2);
+            position: relative;
+            color: #000000;
+        }
+
+        .pdf-content {
+            font-size: 11pt;
+            line-height: 1.5;
+            text-align: justify;
+        }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .image-preview {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border: 2px solid #a855f7;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <!-- Top Alert/Info -->
+    <div class="max-w-7xl mx-auto bg-purple-200 border-l-4 border-purple-600 p-4 mb-6 rounded-r shadow-md">
+        <h3 class="font-bold text-purple-800 text-lg">Aviso Institucional</h3>
+        <p class="text-purple-900 mt-1">
+            A íntegra do Código Urbanístico, bem como o Plano Diretor e demais legislações estão disponíveis no endereço: 
+            <a href="https://sissedur.camacari.ba.gov.br/sedur/index" target="_blank" class="font-bold text-indigo-700 underline hover:text-indigo-900">https://sissedur.camacari.ba.gov.br/sedur/index</a>
+        </p>
+    </div>
+
+    <div class="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-12 gap-8">
+        
+        <!-- Formulário Interativo (Left Side) -->
+        <div class="xl:col-span-5 bg-purple-100 p-6 rounded-xl shadow-lg border border-purple-300 h-fit sticky top-4">
+            <h1 class="text-2xl font-bold text-purple-800 mb-6 border-b-2 border-purple-300 pb-2">Dados da Vistoria</h1>
+            
+            <form id="vistoria-form" class="space-y-5">
+                
+                <!-- Sec: Dados do Processo -->
+                <div>
+                    <h2 class="font-bold text-purple-700 text-lg mb-3">1. Dados do Processo</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Número do Processo</label>
+                            <input type="text" id="proc-numero" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-medium focus:ring-2 focus:ring-purple-600 outline-none" placeholder="Ex: 00089.22.09.008.2026">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Data da Vistoria</label>
+                            <input type="date" id="proc-data" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-medium focus:ring-2 focus:ring-purple-600 outline-none">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Interessado(a)</label>
+                            <input type="text" id="proc-interessado" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-medium focus:ring-2 focus:ring-purple-600 outline-none" placeholder="Nome do requerente ou empresa">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Endereço / Local</label>
+                            <input type="text" id="proc-local" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-medium focus:ring-2 focus:ring-purple-600 outline-none" placeholder="Ex: Residencial Vila Florença...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sec: Dados Urbanísticos -->
+                <div>
+                    <h2 class="font-bold text-purple-700 text-lg mb-3 mt-4">2. Dados Urbanísticos & Alvará</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Alvará de Construção Nº</label>
+                            <input type="text" id="alvara-numero" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-medium outline-none" placeholder="Ex: 85.2025">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Data do Alvará</label>
+                            <input type="date" id="alvara-data" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-medium outline-none">
+                        </div>
+                        
+                        <div class="md:col-span-2">
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Macrozona</label>
+                            <select id="macrozona-select" class="w-full p-2 border border-purple-400 rounded bg-purple-200 text-purple-900 font-bold focus:ring-2 focus:ring-purple-600 outline-none">
+                                <option value="" class="font-bold">-- Selecione a Macrozona --</option>
+                                <option value="Macrozona Urbana" class="font-bold">Macrozona Urbana (MU)</option>
+                                <option value="Macrozona Rural" class="font-bold">Macrozona Rural (MR)</option>
+                                <option value="Macrozona Industrial" class="font-bold">Macrozona Industrial (MI)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="md:col-span-2">
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Zona Urbanística</label>
+                            <select id="zone-select" class="w-full p-2 border border-purple-400 rounded bg-purple-200 text-purple-900 font-bold focus:ring-2 focus:ring-purple-600 outline-none">
+                                <option value="" class="font-bold">-- Selecione a Zona --</option>
+                                <!-- Populated via JS -->
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Uso do Solo Predominante</label>
+                            <select id="use-select" disabled class="w-full p-2 border border-purple-400 rounded bg-purple-200 text-purple-900 font-bold focus:ring-2 focus:ring-purple-600 outline-none">
+                                <option value="" class="font-bold">-- Aguardando Zona --</option>
+                                <!-- Populated via JS -->
+                            </select>
+                        </div>
+                        
+                        <!-- Coleta de Coordenadas Automática/Maps -->
+                        <div class="md:col-span-2 p-3 bg-purple-200 rounded border border-purple-300 mt-2">
+                            <label class="block font-bold text-purple-800 text-sm mb-2">Capturar Coordenadas do Local</label>
+                            <div class="flex gap-2 mb-2">
+                                <button type="button" id="btn-gps" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded text-sm flex items-center justify-center gap-2 transition shadow">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                    Pegar Localização do GPS Atual
+                                </button>
+                            </div>
+                            <div class="flex gap-2">
+                                <input type="text" id="input-maps" class="flex-1 p-2 border border-purple-400 rounded bg-white text-purple-900 font-medium text-sm outline-none" placeholder="Ou cole o Link do Google Maps ou Lat/Lon...">
+                                <button type="button" id="btn-converter-maps" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded text-sm transition shadow">
+                                    Converter
+                                </button>
+                            </div>
+                            <p id="msg-coord" class="text-xs font-semibold text-purple-700 mt-2 hidden"></p>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Coord. UTM - E (X)</label>
+                            <input type="text" id="coord-e" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none" placeholder="Ex: 578584.64">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Coord. UTM - N (Y)</label>
+                            <input type="text" id="coord-n" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none" placeholder="Ex: 8579362.27">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sec: Situação Existente (Recuos) -->
+                <div>
+                    <h2 class="font-bold text-purple-700 text-lg mb-3 mt-4">3. Situação Existente (Recuos Apurados)</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block font-bold text-purple-800 text-xs mb-1">Frontal (m)</label>
+                            <input type="number" step="0.01" id="recuo-frontal" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none transition-colors">
+                            <span id="req-frontal" class="text-[10px] font-bold text-purple-600 block mt-1 leading-tight">Exigido: -</span>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-purple-800 text-xs mb-1">Lat. Dir. (m)</label>
+                            <input type="number" step="0.01" id="recuo-lat-dir" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none transition-colors">
+                            <span id="req-lat-dir" class="text-[10px] font-bold text-purple-600 block mt-1 leading-tight">Exigido: -</span>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-purple-800 text-xs mb-1">Lat. Esq. (m)</label>
+                            <input type="number" step="0.01" id="recuo-lat-esq" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none transition-colors">
+                            <span id="req-lat-esq" class="text-[10px] font-bold text-purple-600 block mt-1 leading-tight">Exigido: -</span>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-purple-800 text-xs mb-1">Fundo (m)</label>
+                            <input type="number" step="0.01" id="recuo-fundo" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none transition-colors">
+                            <span id="req-fundo" class="text-[10px] font-bold text-purple-600 block mt-1 leading-tight">Exigido: -</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sec: Conclusão -->
+                <div>
+                    <h2 class="font-bold text-purple-700 text-lg mb-3 mt-4">4. Conclusão da Vistoria</h2>
+                    <select id="status-conclusao" class="w-full p-2 border border-purple-400 rounded bg-purple-200 text-purple-900 font-bold mb-3 outline-none">
+                        <option value="ATENDE" class="font-bold">ATENDE aos parâmetros (Sem pendências)</option>
+                        <option value="ATENDE_PENDENCIA" class="font-bold">ATENDE aos parâmetros (Com exigência documental)</option>
+                        <option value="NAO_ATENDE" class="font-bold">NÃO ATENDE aos parâmetros</option>
+                    </select>
+                    
+                    <div id="pendencias-container" class="hidden">
+                        <label class="block font-bold text-purple-800 text-sm mb-1">Pendências / Documentos Exigidos:</label>
+                        <div class="space-y-1">
+                            <label class="flex items-center text-sm font-bold text-purple-900"><input type="checkbox" value="Certidão Negativa de Débitos - CND atualizada" class="mr-2 pendencia-cb border-purple-500 text-purple-600"> CND Atualizada</label>
+                            <label class="flex items-center text-sm font-bold text-purple-900"><input type="checkbox" value="Certidão de Ônus em nome do proprietário" class="mr-2 pendencia-cb border-purple-500 text-purple-600"> Certidão de Ônus</label>
+                            <label class="flex items-center text-sm font-bold text-purple-900"><input type="checkbox" value="ART/RRT de execução regularizada" class="mr-2 pendencia-cb border-purple-500 text-purple-600"> ART/RRT de Execução</label>
+                            <label class="flex items-center text-sm font-bold text-purple-900"><input type="checkbox" value="Outros:" class="mr-2 pendencia-cb border-purple-500 text-purple-600" id="check-outros"> Outros (especificar)</label>
+                        </div>
+                        <input type="text" id="outras-pendencias" class="w-full mt-2 p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 text-sm hidden" placeholder="Especifique a pendência...">
+                    </div>
+                </div>
+
+                <!-- Sec: Fotos e Analista -->
+                <div>
+                    <h2 class="font-bold text-purple-700 text-lg mb-3 mt-4">5. Anexos e Assinatura</h2>
+                    <div class="mb-4">
+                        <label class="block font-bold text-purple-800 text-sm mb-1">Inserir Fotos da Obra (Máx 4 recomendadas)</label>
+                        <input type="file" id="foto-upload" multiple accept="image/*" class="w-full text-sm text-purple-900 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-bold file:bg-purple-300 file:text-purple-900 hover:file:bg-purple-400 cursor-pointer">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Nome do(a) Analista</label>
+                            <input type="text" id="analista-nome" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-medium outline-none" placeholder="Ex: Isabela Lopes">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-purple-800 text-sm mb-1">Matrícula</label>
+                            <input type="text" id="analista-matricula" class="w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-medium outline-none" placeholder="Ex: 838553">
+                        </div>
+                    </div>
+                </div>
+
+            </form>
+
+            <!-- Ações -->
+            <div class="mt-8 flex flex-col gap-3">
+                <button id="btn-pdf" class="w-full py-3 bg-purple-700 hover:bg-purple-800 text-purple-100 font-bold rounded shadow-md transition-colors flex justify-center items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    Gerar e Abrir PDF
+                </button>
+                <button id="btn-link" class="w-full py-3 bg-purple-300 hover:bg-purple-400 text-purple-900 font-bold rounded shadow-md transition-colors flex justify-center items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                    Gerar Link de Compartilhamento
+                </button>
+            </div>
+        </div>
+
+        <!-- Pré-visualização do Documento (Right Side) -->
+        <div class="xl:col-span-7 overflow-x-auto bg-purple-200 p-4 rounded-xl border border-purple-300 flex justify-center">
+            
+            <div id="documento-preview" class="a4-page">
+                <div class="pdf-content" id="pdf-inner-content">
+                    
+                    <!-- Cabeçalho (Simulado) -->
+                    <div class="text-center font-bold mb-6 border-b-2 border-black pb-4 text-black">
+                        <p>ESTADO DA BAHIA</p>
+                        <p>PREFEITURA MUNICIPAL DE CAMAÇARI</p>
+                        <p>SECRETARIA DE DESENVOLVIMENTO URBANO E MEIO AMBIENTE - SEDUR</p>
+                        <p>DIRETORIA DE URBANISMO - DIRURB</p>
+                        <p>COORDENADORIA LICENCIAMENTO URBANÍSTICO - CLU</p>
+                    </div>
+
+                    <!-- Título -->
+                    <h2 class="text-center font-bold text-lg mb-6 text-purple-900" style="color: #4c1d95;">RELATÓRIO DE VISTORIA - <span id="prev-data-titulo" class="uppercase">DD/MM/AAAA</span></h2>
+
+                    <!-- Dados Processo -->
+                    <div class="mb-6">
+                        <h3 class="font-bold text-purple-800 mb-2" style="color: #6b21a8; border-bottom: 1px solid #d8b4fe;">DADOS DO PROCESSO</h3>
+                        <p><strong>NÚMERO:</strong> <span id="prev-proc">...</span></p>
+                        <p><strong>INTERESSADO(A):</strong> <span id="prev-interessado" class="uppercase">...</span></p>
+                        <p><strong>ASSUNTO:</strong> ALVARÁ DE HABITE-SE</p>
+                        <p><strong>LOCAL:</strong> <span id="prev-local">...</span></p>
+                    </div>
+
+                    <!-- 1. Objetivo -->
+                    <div class="mb-6">
+                        <h3 class="font-bold text-purple-800 mb-2" style="color: #6b21a8; border-bottom: 1px solid #d8b4fe;">1. OBJETIVO</h3>
+                        <p>
+                            Vistoriar edificação <span id="prev-uso-texto" class="lowercase font-bold">...</span>, localizada no endereço supracitado, para verificar a situação da obra, com a finalidade de obter o Alvará de Habite-se. 
+                            A edificação possui Alvará de Construção nº <span id="prev-alv-num" class="font-bold">...</span>, emitido em <span id="prev-alv-data" class="font-bold">...</span>. 
+                            A edificação se encontra localizada na <span id="prev-macrozona" class="font-bold">...</span>, na zona <span id="prev-zona" class="font-bold">...</span> <span id="prev-zona-extenso" class="font-bold"></span>. 
+                            Coordenadas: E: <span id="prev-coord-e">...</span>, N: <span id="prev-coord-n">...</span>.
+                        </p>
+                    </div>
+
+                    <!-- 2. Situação Existente -->
+                    <div class="mb-6">
+                        <h3 class="font-bold text-purple-800 mb-2" style="color: #6b21a8; border-bottom: 1px solid #d8b4fe;">2. SITUAÇÃO EXISTENTE</h3>
+                        <p>Conforme vistoria, identificou-se que a obra se encontra concluída com as informações abaixo:</p>
+                        <p class="mt-2 font-bold text-center bg-purple-50 p-2 border border-purple-200">
+                            Recuos (m) - Frontal (<span id="prev-rf">0.00</span>) / Lateral Direito (<span id="prev-rld">0.00</span>) / Lateral Esquerdo (<span id="prev-rle">0.00</span>) / Fundo (<span id="prev-rfd">0.00</span>)
+                        </p>
+                        <p class="mt-2 text-sm italic">Conforme apurado em vistoria in loco.</p>
+                    </div>
+
+                    <!-- 3. Conclusão -->
+                    <div class="mb-6">
+                        <h3 class="font-bold text-purple-800 mb-2" style="color: #6b21a8; border-bottom: 1px solid #d8b4fe;">3. CONCLUSÃO</h3>
+                        <p>
+                            Após a vistoria realizada em <span id="prev-data-conclusao">DD/MM/AAAA</span> e a análise das informações obtidas em campo, assim como dos documentos do processo, informamos que a obra <strong id="prev-status-texto" class="uppercase">...</strong> aos parâmetros estabelecidos pela legislação urbanística vigente.
+                        </p>
+                        <div id="prev-pendencias-bloco" class="hidden mt-3">
+                            <p class="mb-2">Entretanto, há necessidade de apresentar alguns documentos complementares. Seguem solicitações para continuidade da análise do processo:</p>
+                            <ol id="prev-pendencias-lista" class="list-decimal list-inside pl-4 font-bold text-purple-900" style="color: #4c1d95;"></ol>
+                        </div>
+                    </div>
+
+                    <!-- 4. Fotos -->
+                    <div class="mb-6">
+                        <h3 class="font-bold text-purple-800 mb-2" style="color: #6b21a8; border-bottom: 1px solid #d8b4fe;">4. FOTOS</h3>
+                        <div id="prev-fotos" class="image-grid">
+                            <!-- Fotos renderizadas dinamicamente aqui -->
+                        </div>
+                        <p id="prev-nofotos" class="text-sm italic text-gray-500">Nenhuma foto anexada.</p>
+                    </div>
+
+                    <!-- Assinatura -->
+                    <div class="mt-16 text-center">
+                        <p>Camaçari, <span id="prev-data-extenso">DD de Mês de AAAA</span></p>
+                        <p class="mt-8 font-bold border-t border-black inline-block pt-2 px-8" style="color: #000;">
+                            <span id="prev-analista-nome" class="uppercase">NOME DO ANALISTA</span><br>
+                            <span class="font-normal text-sm">Matrícula: <span id="prev-analista-mat">...</span> / CLU</span>
+                        </p>
+                    </div>
+
+                    <!-- Rodapé Institucional -->
+                    <div class="mt-12 text-center text-xs font-bold" style="color: #6b21a8;">
+                        <p>Coordenadoria de Licenciamento Urbanístico (CLU)</p>
+                        <p>Diretoria de Urbanismo (DIRURB)</p>
+                        <p>Secretaria de Desenvolvimento Urbano e Meio Ambiente (SEDUR) / PMC</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Definição das Projeções para o Proj4js (WGS84 -> UTM Zone 24S)
+        proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+        proj4.defs("EPSG:32724", "+proj=utm +zone=24 +south +datum=WGS84 +units=m +no_defs");
+
+        // Base de Dados Urbanísticos COMPLETA (Extraída do Buscador de Parâmetros_v2)
+        const urbanData = [
+            { "ZONA": "ZDC 1", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZDC 1", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZDC 1", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZDC 1", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZDC 1", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "12,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZDC 2", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZDC 2", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZDC 2", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZDC 2", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZDC 2", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "12,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZDC 3", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZDC 3", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZDC 3", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZDC 3", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZDC 3", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "12,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZDC 4", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZDC 4", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZDC 4", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZDC 4", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZDC 4", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZDC 5", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZDC 5", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZDC 5", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZDC 5", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZDC 5", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 1", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 1", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 1", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 1", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 1", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 2", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 2", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 2", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 2", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "6,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 2", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOC 3", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 3", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 3", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 3", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 3", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 4", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 4", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 4", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 4", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZOC 4", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "8,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZE 1", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 1", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "3,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 1", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "3,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 1", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "3,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 1", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 2", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZE 2", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZE 2", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZE 2", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZE 2", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZE 3", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 3", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 3", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 3", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZE 3", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZOUC 1", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZOUC 1", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "2,50" },
+            { "ZONA": "ZOUC 1", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOUC 1", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "2,50", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZOUC 1", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "2,50" },
+            { "ZONA": "ZOUC 2", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZOUC 2", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZOUC 2", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZOUC 2", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZOUC 2", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZAICS 1", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "ZAICS 1", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "ZAICS 1", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "7,50", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZAICS 1", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "7,50", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZAICS 1", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "7,50", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZAICS 2", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "ZAICS 2", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "ZAICS 2", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZAICS 2", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZAICS 2", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "7,50", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZUE 1", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "ZUE 1", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "ZUE 1", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "15,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 1", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "15,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 1", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "15,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 2", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "ZUE 2", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZUE 2", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZUE 2", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZUE 2", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZUE 3", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 3", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 3", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 3", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 3", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 4", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZUE 4", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 4", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 4", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZUE 4", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "5,00", "RECUO FUNDO (m)": "5,00" },
+            { "ZONA": "ZONA RURAL", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZONA RURAL", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZONA RURAL", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZONA RURAL", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "ZONA RURAL", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "10,00", "RECUO LATERAL (m)": "2,00", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZEIS 1", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 1", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 1", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 1", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 2", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 2", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 2", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 2", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 3", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "3,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 3", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "4,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 3", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "4,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 3", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "4,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 4", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "2,50", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 4", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "3,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 4", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "3,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 4", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "3,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "1,50" },
+            { "ZONA": "ZEIS 5", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZEIS 5", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZEIS 5", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "ZEIS 5", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "5,00", "RECUO LATERAL (m)": "1,50", "RECUO FUNDO (m)": "2,00" },
+            { "ZONA": "CeLin 1 - BA099 - ESTRADA DO COCO", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "CeLin 1 - BA099 - ESTRADA DO COCO", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "10 m após a faixa de dominio", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "CeLin 1 - BA099 - ESTRADA DO COCO", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "10 m após a faixa de dominio", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "CeLin 1 - BA099 - ESTRADA DO COCO", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "10 m após a faixa de dominio", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "CeLin 1 - BA099 - ESTRADA DO COCO", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "10 m após a faixa de dominio", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "CeLin 2 - VIA METROPOLITANA", "USOS": "UNIRESIDENCIAL", "RECUO FRENTE (m)": "não se aplica", "RECUO LATERAL (m)": "não se aplica", "RECUO FUNDO (m)": "não se aplica" },
+            { "ZONA": "CeLin 2 - VIA METROPOLITANA", "USOS": "PLURIRESIDENCIAL", "RECUO FRENTE (m)": "10 m após a faixa de dominio", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "CeLin 2 - VIA METROPOLITANA", "USOS": "COMÉRCIO, SERVIÇO, INSTITUCIONAL", "RECUO FRENTE (m)": "10 m após a faixa de dominio", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "CeLin 2 - VIA METROPOLITANA", "USOS": "INDUSTRIAL", "RECUO FRENTE (m)": "10 m após a faixa de dominio", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" },
+            { "ZONA": "CeLin 2 - VIA METROPOLITANA", "USOS": "EMPREENDIMENTO TURÍSTICO", "RECUO FRENTE (m)": "10 m após a faixa de dominio", "RECUO LATERAL (m)": "3,00", "RECUO FUNDO (m)": "3,00" }
+        ];
+
+        let selectedUrbanData = null;
+
+        // Traduz as siglas para nomes por extenso
+        function getZonaExtenso(zonaStr) {
+            if (!zonaStr) return "";
+            if (zonaStr.startsWith("ZOUC")) return "(Zona Urbana Consolidada)";
+            if (zonaStr.startsWith("ZEIS")) return "(Zona Especial de Interesse Social)";
+            if (zonaStr.startsWith("ZE ")) return "(Zona de Expansão)";
+            if (zonaStr.startsWith("ZDC")) return "(Zona de Desenvolvimento da Costa)";
+            if (zonaStr.startsWith("ZOC")) return "(Zona de Ocupação)";
+            if (zonaStr.startsWith("ZAICS")) return "(Zona de Apoio à Indústria, Comércio e Serviços)";
+            if (zonaStr.startsWith("ZUE")) return "(Zonas de Usos Especiais)";
+            if (zonaStr.startsWith("ZPIC")) return "(Zona Polo Industrial de Camaçari)";
+            if (zonaStr.startsWith("CeLin")) return "(Centralidade Linear)";
+            if (zonaStr === "ZONA RURAL") return "";
+            return "";
+        }
+
+        // Format Date to BR format
+        function formatDataBR(dataIso) {
+            if(!dataIso) return "...";
+            const [y, m, d] = dataIso.split('-');
+            return `${d}/${m}/${y}`;
+        }
+
+        function formatDataExtenso(dataIso) {
+            if(!dataIso) return "DD de Mês de AAAA";
+            const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            const [y, m, d] = dataIso.split('-');
+            return `${d} de ${meses[parseInt(m)-1]} de ${y}`;
+        }
+
+        // Initialize UI Elements
+        document.addEventListener('DOMContentLoaded', () => {
+            const macrozonaSelect = document.getElementById('macrozona-select');
+            const zoneSelect = document.getElementById('zone-select');
+            const useSelect = document.getElementById('use-select');
+            const form = document.getElementById('vistoria-form');
+            const imageInput = document.getElementById('foto-upload');
+            const imagePreviewContainer = document.getElementById('prev-fotos');
+            const noFotosMsg = document.getElementById('prev-nofotos');
+            let storedImages = []; 
+
+            // Extract Unique Zones
+            const uniqueZones = [...new Set(urbanData.map(item => item.ZONA))];
+            uniqueZones.forEach(zona => {
+                const opt = document.createElement('option');
+                opt.value = zona; opt.textContent = zona; opt.className = 'font-bold';
+                zoneSelect.appendChild(opt);
+            });
+
+            // Zone Change -> Populate Uses
+            zoneSelect.addEventListener('change', (e) => {
+                const selected = e.target.value;
+                useSelect.innerHTML = '<option value="" class="font-bold">-- Selecione o Uso --</option>';
+                selectedUrbanData = null;
+
+                if (selected) {
+                    const zoneItems = urbanData.filter(z => z.ZONA === selected);
+                    const uniqueUses = [...new Set(zoneItems.map(item => item.USOS))];
+                    uniqueUses.forEach(uso => {
+                        const opt = document.createElement('option');
+                        opt.value = uso; opt.textContent = uso; opt.className = 'font-bold';
+                        useSelect.appendChild(opt);
+                    });
+                    useSelect.disabled = false;
+                } else {
+                    useSelect.disabled = true;
+                }
+                updatePreview();
+            });
+
+            useSelect.addEventListener('change', (e) => {
+                const selectedUso = e.target.value;
+                const selectedZone = zoneSelect.value;
+                if(selectedZone && selectedUso) {
+                    selectedUrbanData = urbanData.find(u => u.ZONA === selectedZone && u.USOS === selectedUso);
+                } else {
+                    selectedUrbanData = null;
+                }
+                updatePreview();
+            });
+
+            // Handle GPS Coordenadas
+            document.getElementById('btn-gps').addEventListener('click', () => {
+                const msgEl = document.getElementById('msg-coord');
+                msgEl.classList.remove('hidden');
+                msgEl.textContent = "Obtendo localização...";
+                
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition((position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        converterEPreencher(lat, lon, msgEl);
+                    }, (error) => {
+                        msgEl.textContent = "⚠️ Erro ao obter GPS. Verifique as permissões.";
+                        msgEl.classList.add('text-red-600');
+                    });
+                } else {
+                    msgEl.textContent = "⚠️ Geolocation não suportado neste navegador.";
+                    msgEl.classList.add('text-red-600');
+                }
+            });
+
+            // Handle Map Links or Lat/Lon text
+            document.getElementById('btn-converter-maps').addEventListener('click', () => {
+                const inputVal = document.getElementById('input-maps').value;
+                const msgEl = document.getElementById('msg-coord');
+                msgEl.classList.remove('hidden');
+
+                // Regex to find coords format: -12.123, -38.123 or @-12.123,-38.123
+                const regex = /(-?\d+\.\d+)[\s,]+(-?\d+\.\d+)/;
+                const match = inputVal.match(regex);
+
+                if (match && match.length >= 3) {
+                    const lat = parseFloat(match[1]);
+                    const lon = parseFloat(match[2]);
+                    converterEPreencher(lat, lon, msgEl);
+                } else {
+                    msgEl.textContent = "⚠️ Formato inválido. Use Graus Decimais ou cole o link do Google Maps.";
+                    msgEl.classList.replace('text-purple-700', 'text-red-600');
+                }
+            });
+
+            function converterEPreencher(lat, lon, msgEl) {
+                try {
+                    // WGS84 to UTM 24S
+                    const coordsUtm = proj4("EPSG:4326", "EPSG:32724", [lon, lat]);
+                    document.getElementById('coord-e').value = coordsUtm[0].toFixed(2);
+                    document.getElementById('coord-n').value = coordsUtm[1].toFixed(2);
+                    
+                    msgEl.textContent = `✅ Sucesso: Lat ${lat.toFixed(5)}, Lon ${lon.toFixed(5)}`;
+                    msgEl.classList.replace('text-red-600', 'text-green-700');
+                    if(!msgEl.classList.contains('text-green-700')) msgEl.classList.add('text-green-700');
+                    updatePreview();
+                } catch(e) {
+                    msgEl.textContent = "⚠️ Erro matemático ao converter coordenadas.";
+                    msgEl.classList.replace('text-green-700', 'text-red-600');
+                }
+            }
+
+            // Handle Checkboxes for Pendências
+            const checkOutros = document.getElementById('check-outros');
+            const inputOutras = document.getElementById('outras-pendencias');
+            checkOutros.addEventListener('change', (e) => {
+                if(e.target.checked) inputOutras.classList.remove('hidden');
+                else inputOutras.classList.add('hidden');
+                updatePreview();
+            });
+
+            // Handle Image Uploads
+            imageInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files).slice(0,4);
+                storedImages = [];
+                imagePreviewContainer.innerHTML = '';
+                
+                if(files.length > 0) noFotosMsg.classList.add('hidden');
+                else noFotosMsg.classList.remove('hidden');
+
+                files.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        storedImages.push(event.target.result);
+                        const img = document.createElement('img');
+                        img.src = event.target.result;
+                        img.className = 'image-preview';
+                        imagePreviewContainer.appendChild(img);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            });
+
+            form.addEventListener('input', updatePreview);
+
+            // Function to Validate Recuos vs Official Parameters
+            function validarRecuos() {
+                const setValidationState = (inputId, reqId, reqValueStr) => {
+                    const inputEl = document.getElementById(inputId);
+                    const reqEl = document.getElementById(reqId);
+                    
+                    if(!selectedUrbanData || !reqValueStr) {
+                        reqEl.textContent = "Exigido: Selecione a Zona e Uso";
+                        reqEl.className = "text-[10px] font-bold text-purple-600 block mt-1 leading-tight";
+                        inputEl.className = "w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none transition-colors";
+                        return;
+                    }
+
+                    // Handles text cases like "não se aplica" or "10m após a faixa"
+                    const reqVal = parseFloat(reqValueStr.replace(',', '.'));
+                    const inputVal = parseFloat(inputEl.value);
+
+                    if (isNaN(reqVal)) {
+                        reqEl.textContent = `Exigido: ${reqValueStr}`;
+                        reqEl.className = "text-[10px] font-bold text-purple-600 block mt-1 leading-tight";
+                        inputEl.className = "w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none transition-colors";
+                    } else if (!isNaN(inputVal)) {
+                        if (inputVal < reqVal) {
+                            inputEl.className = "w-full p-2 border-2 border-red-500 rounded bg-red-50 text-red-900 font-bold outline-none transition-colors";
+                            reqEl.innerHTML = `Exigido: ${reqValueStr}m ⚠️ Inválido!`;
+                            reqEl.className = "text-[10px] font-bold text-red-600 block mt-1 leading-tight";
+                        } else {
+                            inputEl.className = "w-full p-2 border-2 border-green-500 rounded bg-green-50 text-green-900 font-bold outline-none transition-colors";
+                            reqEl.innerHTML = `Exigido: ${reqValueStr}m ✅ OK`;
+                            reqEl.className = "text-[10px] font-bold text-green-600 block mt-1 leading-tight";
+                        }
+                    } else {
+                        reqEl.textContent = `Exigido: ${reqValueStr}m`;
+                        reqEl.className = "text-[10px] font-bold text-purple-600 block mt-1 leading-tight";
+                        inputEl.className = "w-full p-2 border border-purple-400 rounded bg-purple-50 text-purple-900 font-bold outline-none transition-colors";
+                    }
+                };
+
+                const f = selectedUrbanData ? selectedUrbanData['RECUO FRENTE (m)'] : null;
+                const ld = selectedUrbanData ? selectedUrbanData['RECUO LATERAL (m)'] : null;
+                const le = selectedUrbanData ? selectedUrbanData['RECUO LATERAL (m)'] : null;
+                const fd = selectedUrbanData ? selectedUrbanData['RECUO FUNDO (m)'] : null;
+
+                setValidationState('recuo-frontal', 'req-frontal', f);
+                setValidationState('recuo-lat-dir', 'req-lat-dir', ld);
+                setValidationState('recuo-lat-esq', 'req-lat-esq', le);
+                setValidationState('recuo-fundo', 'req-fundo', fd);
+            }
+
+            // Function to update document preview
+            function updatePreview() {
+                validarRecuos();
+
+                // Texts
+                document.getElementById('prev-proc').textContent = document.getElementById('proc-numero').value || '...';
+                
+                const dataVist = document.getElementById('proc-data').value;
+                document.getElementById('prev-data-titulo').textContent = formatDataBR(dataVist);
+                document.getElementById('prev-data-conclusao').textContent = formatDataBR(dataVist);
+                document.getElementById('prev-data-extenso').textContent = formatDataExtenso(dataVist);
+
+                document.getElementById('prev-interessado').textContent = document.getElementById('proc-interessado').value || '...';
+                document.getElementById('prev-local').textContent = document.getElementById('proc-local').value || '...';
+                document.getElementById('prev-alv-num').textContent = document.getElementById('alvara-numero').value || '...';
+                document.getElementById('prev-alv-data').textContent = formatDataBR(document.getElementById('alvara-data').value);
+                
+                document.getElementById('prev-macrozona').textContent = macrozonaSelect.value || '...';
+                
+                const selectedZ = zoneSelect.value || '...';
+                document.getElementById('prev-zona').textContent = selectedZ;
+                document.getElementById('prev-zona-extenso').textContent = getZonaExtenso(selectedZ);
+                
+                document.getElementById('prev-uso-texto').textContent = useSelect.value || '...';
+                document.getElementById('prev-coord-e').textContent = document.getElementById('coord-e').value || '...';
+                document.getElementById('prev-coord-n').textContent = document.getElementById('coord-n').value || '...';
+
+                // Recuos
+                document.getElementById('prev-rf').textContent = document.getElementById('recuo-frontal').value || '0.00';
+                document.getElementById('prev-rld').textContent = document.getElementById('recuo-lat-dir').value || '0.00';
+                document.getElementById('prev-rle').textContent = document.getElementById('recuo-lat-esq').value || '0.00';
+                document.getElementById('prev-rfd').textContent = document.getElementById('recuo-fundo').value || '0.00';
+
+                // Conclusão
+                const statusSelect = document.getElementById('status-conclusao').value;
+                const prevStatusTexto = document.getElementById('prev-status-texto');
+                const pendenciasBloco = document.getElementById('prev-pendencias-bloco');
+                const pendenciasLista = document.getElementById('prev-pendencias-lista');
+
+                if (statusSelect === 'ATENDE') {
+                    prevStatusTexto.textContent = 'ATENDE';
+                    prevStatusTexto.className = 'font-bold text-green-700';
+                    document.getElementById('pendencias-container').classList.add('hidden');
+                    pendenciasBloco.classList.add('hidden');
+                } else if (statusSelect === 'ATENDE_PENDENCIA') {
+                    prevStatusTexto.textContent = 'ATENDE (COM EXIGÊNCIAS)';
+                    prevStatusTexto.className = 'font-bold text-yellow-700';
+                    document.getElementById('pendencias-container').classList.remove('hidden');
+                    pendenciasBloco.classList.remove('hidden');
+                } else {
+                    prevStatusTexto.textContent = 'NÃO ATENDE';
+                    prevStatusTexto.className = 'font-bold text-red-700';
+                    document.getElementById('pendencias-container').classList.add('hidden');
+                    pendenciasBloco.classList.add('hidden');
+                }
+
+                // Render pendências
+                pendenciasLista.innerHTML = '';
+                const cbs = document.querySelectorAll('.pendencia-cb:checked');
+                cbs.forEach(cb => {
+                    let text = cb.value;
+                    if(text === 'Outros:') text = document.getElementById('outras-pendencias').value || 'Outros não especificados';
+                    const li = document.createElement('li');
+                    li.textContent = text;
+                    pendenciasLista.appendChild(li);
+                });
+
+                // Analista
+                document.getElementById('prev-analista-nome').textContent = document.getElementById('analista-nome').value || 'NOME DO ANALISTA';
+                document.getElementById('prev-analista-mat').textContent = document.getElementById('analista-matricula').value || '...';
+            }
+
+            // --- PDF Generation Action (Open in new tab) ---
+            document.getElementById('btn-pdf').addEventListener('click', () => {
+                const element = document.getElementById('documento-preview');
+                const opt = {
+                    margin:       0,
+                    filename:     `Relatorio_HabiteSe_${document.getElementById('proc-interessado').value || 'CLU'}.pdf`,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                
+                // Gera o PDF como blob e abre em uma nova aba
+                html2pdf().set(opt).from(element).toPdf().get('pdf').then(function (pdf) {
+                    window.open(pdf.output('bloburl'), '_blank');
+                });
+            });
+
+            // --- Share Link Generation Action ---
+            document.getElementById('btn-link').addEventListener('click', () => {
+                const state = {
+                    p_num: document.getElementById('proc-numero').value,
+                    p_data: document.getElementById('proc-data').value,
+                    p_int: document.getElementById('proc-interessado').value,
+                    p_loc: document.getElementById('proc-local').value,
+                    a_num: document.getElementById('alvara-numero').value,
+                    a_dat: document.getElementById('alvara-data').value,
+                    m_sel: macrozonaSelect.value,
+                    z_sel: zoneSelect.value,
+                    u_sel: useSelect.value,
+                    c_e: document.getElementById('coord-e').value,
+                    c_n: document.getElementById('coord-n').value,
+                    r_f: document.getElementById('recuo-frontal').value,
+                    r_ld: document.getElementById('recuo-lat-dir').value,
+                    r_le: document.getElementById('recuo-lat-esq').value,
+                    r_fd: document.getElementById('recuo-fundo').value,
+                    stat: document.getElementById('status-conclusao').value,
+                    a_nom: document.getElementById('analista-nome').value,
+                    a_mat: document.getElementById('analista-matricula').value
+                };
+
+                const encodedString = btoa(encodeURIComponent(JSON.stringify(state)));
+                const shareableUrl = window.location.origin + window.location.pathname + '?d=' + encodedString;
+                
+                navigator.clipboard.writeText(shareableUrl).then(() => {
+                    alert('Link gerado e copiado para a área de transferência!\n\nNota: Devido ao tamanho das URLs, as fotos precisam ser inseridas novamente por quem abrir o link.');
+                }).catch(err => {
+                    prompt("Copie o link abaixo:", shareableUrl);
+                });
+            });
+
+            // --- On Load: Parse URL params if exists ---
+            const urlParams = new URLSearchParams(window.location.search);
+            const dataParam = urlParams.get('d');
+            if(dataParam) {
+                try {
+                    const decoded = JSON.parse(decodeURIComponent(atob(dataParam)));
+                    document.getElementById('proc-numero').value = decoded.p_num || '';
+                    document.getElementById('proc-data').value = decoded.p_data || '';
+                    document.getElementById('proc-interessado').value = decoded.p_int || '';
+                    document.getElementById('proc-local').value = decoded.p_loc || '';
+                    document.getElementById('alvara-numero').value = decoded.a_num || '';
+                    document.getElementById('alvara-data').value = decoded.a_dat || '';
+                    
+                    if(decoded.m_sel) {
+                        macrozonaSelect.value = decoded.m_sel;
+                        macrozonaSelect.dispatchEvent(new Event('change'));
+                    }
+                    if(decoded.z_sel) {
+                        zoneSelect.value = decoded.z_sel;
+                        zoneSelect.dispatchEvent(new Event('change'));
+                    }
+                    if(decoded.u_sel) {
+                        useSelect.value = decoded.u_sel;
+                        useSelect.dispatchEvent(new Event('change'));
+                    }
+
+                    document.getElementById('coord-e').value = decoded.c_e || '';
+                    document.getElementById('coord-n').value = decoded.c_n || '';
+                    document.getElementById('recuo-frontal').value = decoded.r_f || '';
+                    document.getElementById('recuo-lat-dir').value = decoded.r_ld || '';
+                    document.getElementById('recuo-lat-esq').value = decoded.r_le || '';
+                    document.getElementById('recuo-fundo').value = decoded.r_fd || '';
+                    
+                    if(decoded.stat) {
+                        document.getElementById('status-conclusao').value = decoded.stat;
+                        document.getElementById('status-conclusao').dispatchEvent(new Event('change'));
+                    }
+
+                    document.getElementById('analista-nome').value = decoded.a_nom || '';
+                    document.getElementById('analista-matricula').value = decoded.a_mat || '';
+
+                    updatePreview();
+                } catch(e) {
+                    console.error("Falha ao ler dados da URL.");
+                }
+            }
+        });
+    </script>
+</body>
+</html>
