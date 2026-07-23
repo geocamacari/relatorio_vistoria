@@ -272,7 +272,7 @@
                 <div>
                     <h2 class="font-bold text-purple-700 text-lg mb-3 mt-4">5. Anexos e Assinatura</h2>
                     <div class="mb-4">
-                        <label class="block font-bold text-red-800 text-sm mb-1">Inserir Fotos da Vistoria</label>
+                        <label class="block font-bold text-red-800 text-sm mb-1">Inserir Fotos da Vistoria (no máximo 8)</label>
                         <input type="file" id="foto-upload" multiple accept="image/*" class="w-full text-sm text-orange-900 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-bold file:bg-orange-300 file:text-orange-900 hover:file:bg-purple-400 cursor-pointer">
                     </div>
                     <div class="grid grid-cols-2 gap-4">
@@ -721,7 +721,7 @@
 
             // Imagens
             imageInput.addEventListener('change', (e) => {
-                const files = Array.from(e.target.files).slice(0,4);
+                const files = Array.from(e.target.files).slice(0,8);
                 imagePreviewContainer.innerHTML = '';
                 if(files.length > 0) noFotosMsg.classList.add('hidden');
                 else noFotosMsg.classList.remove('hidden');
